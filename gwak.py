@@ -31,6 +31,13 @@ def _filter_dir(path: str) -> str:
         raise NotADirectoryError(string)
     return os.path.join(path, '')
 
+def _rmdir(path: str) -> bool:
+    if not os.path.isdir(path) or os.listdir(path):
+        return False
+    if not __params.dry_run:
+        os.rmdir(path)
+    return True
+
 def _is_not_regular_file(path: str) -> bool:
     return not os.path.isfile(path) or os.path.islink(path)
 
@@ -136,12 +143,18 @@ def dedupe(gwaks: dict) -> list:
 
 def _redupe(gwaks: dict, grave: str):
     for size, gwak in gwaks.items():
+        sizedir = os.path.join(grave, size)
         for hash, links in gwak.items():
-            file = os.path.join(grave, size, hash)
+            hashdir = os.path.join(sizedir, hash)
+            file = os.path.join(sizedir, hash)
             if not os.path.isfile(file):
                 logging.debug(f"skipping missing file [{file}]")
                 continue
             yield _exhume(file, links)
+            if __params.force:
+                _rmdir(hashdir)
+        if __params.force:
+            _rmdir(sizedir)
 
 def redupe(gwaks: dict, grave: str) -> bool:
     return all(_redupe(gwaks, grave))
