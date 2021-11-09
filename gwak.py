@@ -23,6 +23,7 @@ __MINSIZE = 256
 __MINDUPE = 2
 __MANIFEST = 'gwak'
 __GWAK = '._gwak'
+__FILTERGLOB = '[!.]*'
 
 __params = None
 
@@ -41,8 +42,21 @@ def _rmdir(path: Path) -> bool:
         path.rmdir()
     return True
 
-def _is_not_regular_file(path: Path) -> bool:
-    return not path.is_file() or path.is_symlink()
+def _walk(path: Path):
+    for item in path.iterdir():
+        if item.name in __params.exclude or not item.match(__params.filter):
+            logging.info(f"excluding path [{item}]")
+            continue
+        if item.is_symlink():
+            logging.info(f"skipping symlink [{item}]")
+            continue
+        if item.is_dir():
+            yield from _walk(item)
+            continue
+        if not item.is_file():
+            logging.info(f"skipping irregular file [{item}]")
+            continue
+        yield item.resolve()
 
 def _is_smol(size: str) -> bool:
     return int(size, 16) < __params.minsize
@@ -53,11 +67,11 @@ def __format_size(body: bytes) -> str:
 def __format_hash(body: bytes) -> str:
     return hashlib.sha3_512(body).hexdigest()
 
-def _bury(size: str, hash: str, file: Path) -> tuple:
-    body_dirname = __params.grave / size
+def _bury(size: str, hash: str, file: Path) -> dict:
+    body_dir = __params.grave / size
     if not __params.dry_run:
-        body_dirname.mkdir(parents = True, exist_ok = True)
-    body = body_dirname / hash
+        body_dir.mkdir(parents = True, exist_ok = True)
+    body = body_dir / hash
     link = body if __params.isabs else os.path.relpath(body, file.parent)
     logging.debug(f"symlink [{link}]")
     if not __params.dry_run:
@@ -118,17 +132,9 @@ def _backup_manifest() -> None:
 def make_manifest(paths: list) -> dict:
     gwaks = collections.defaultdict(lambda: collections.defaultdict(list))
     for path in paths:
-        for root, dirs, files in os.walk(path):
-            root = Path(root)
-            if __params.grave.name in dirs:
-                dirs.remove(__params.grave.name)
-            for file in files:
-                file = root / file
-                if _is_not_regular_file(file):
-                    logging.info(f"skipping irregular file [{file}]")
-                    continue
-                body = file.read_bytes()
-                gwaks[__format_size(body)][__format_hash(body)].append(str(file.resolve()))
+        for file in _walk(path):
+            body = file.read_bytes()
+            gwaks[__format_size(body)][__format_hash(body)].append(str(file.resolve()))
     return {k: dict(v) for k, v in gwaks.items()}
 
 def _dedupe(gwaks: dict):
@@ -208,11 +214,13 @@ if __name__ == '__main__':
         parser.add_argument('path', type = _filter_dir, nargs = '+', help = "target directory")
         parser.add_argument('-v', '--verbose', action = 'count', default = 0, help = "increase verbosity")
         parser.add_argument('-q', '--quiet', action = 'count', default = 0, help = "decrease verbosity")
-        parser.add_argument('-m', '--manifest', type = Path, default = __MANIFEST, metavar = 'FILEPATH', help = f"manifest file (default: {__MANIFEST})")
+        parser.add_argument('-m', '--manifest', type = Path, default = __MANIFEST, metavar = 'FILE', help = f"manifest file (default: {__MANIFEST})")
         parser.add_argument('--format', choices = __formats, default = __formats[0], help = "manifest format")
         parser.add_argument('-g', '--grave', type = Path, default = __GWAK, metavar = 'DIR', help = f"place to bury filebodies (default: {__GWAK} in first target directory)")
         parser.add_argument('-f', '--force', action = 'store_true', help = "gwak rare or small files, and delete filebodies")
         parser.add_argument('-u', '--undo', '--ungwak', action = 'store_true', help = "ungwak by replacing symlinks with regular files")
+        parser.add_argument('--exclude', type = str, nargs = '*', default = [], metavar = 'DIR', help = "exclude subdirectories by name")
+        parser.add_argument('--filter', type = str, default = __FILTERGLOB, metavar = 'PATTERN', help = f"filter files and subdirectories by glob pattern (default: {__FILTERGLOB})")
         parser.add_argument('--minsize', type = int, default = __MINSIZE, metavar = 'N', help = f"minimum file size to be replaced (default: {__MINSIZE})")
         parser.add_argument('--mindupe', type = int, default = __MINDUPE, metavar = 'N', help = f"minimum file appearances to be replaced (default: {__MINDUPE})")
         parser.add_argument('--validate', action = 'store_true', help = "validate gwaked directory")
@@ -223,6 +231,7 @@ if __name__ == '__main__':
         __params.verbosity = __params.verbose - __params.quiet
         __params.isabs = __params.grave.is_absolute()
         if not __params.isabs:
+            __params.exclude.append(__params.grave.name)
             __params.grave = __params.path[0] / __params.grave
         __params.manifest = __params.manifest if __params.manifest.is_absolute() else __params.grave / __params.manifest
 
