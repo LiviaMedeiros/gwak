@@ -3,7 +3,11 @@ import collections
 import hashlib
 from pathlib import Path
 
-formats = ['yaml', 'json']
+formats = ['yaml', 'json', 'csv']
+try:
+    import csv
+except ImportError:
+    formats.remove('csv')
 try:
     import json
 except ImportError:
@@ -45,6 +49,25 @@ class Manifest():
                 continue
             yield item.resolve()
 
+    def _gen_bytree(self):
+        for path in self._params.path:
+            for file in self._walk(path):
+                body = file.read_bytes()
+                yield gwak_size(body), gwak_hash(body), file.resolve()
+
+    def _gen_bytable(self, files):
+        for size, hash, file in files:
+            yield size, hash, Path(file)
+
+    def _csvload(self, f) -> dict:
+        return self._makedict(self._gen_bytable(csv.reader(f)))
+
+    def _makedict(self, gen) -> dict:
+        gwaks = collections.defaultdict(lambda: collections.defaultdict(list))
+        for size, hash, file in gen:
+            gwaks[size][hash].append(file)
+        return self._normalize(gwaks)
+
     def _backup(self) -> None:
         logging.warning(f"backing up old manifest [{self._file}]")
         hash = hashlib.sha3_512(self._file.read_bytes()).hexdigest()
@@ -57,6 +80,8 @@ class Manifest():
                     return yaml.safe_load(f)
                 case 'json':
                     return json.load(f)
+                case 'csv':
+                    return self._csvload(f)
 
     def _write(self) -> None:
         with self._file.open(mode = 'w') as f:
@@ -65,6 +90,8 @@ class Manifest():
                     return yaml.dump(self.serialize(), f)
                 case 'json':
                     return json.dump(self.serialize(), f)
+                case 'csv':
+                    return csv.writer(f).writerows(self.pettan())
 
 
     def get(self) -> dict:
@@ -96,12 +123,7 @@ class Manifest():
         return self._write()
 
     def make(self) -> dict:
-        gwaks = collections.defaultdict(lambda: collections.defaultdict(list))
-        for path in self._params.path:
-            for file in self._walk(path):
-                body = file.read_bytes()
-                gwaks[gwak_size(body)][gwak_hash(body)].append(file.resolve())
-        self._data = self._normalize(gwaks)
+        self._data = self._makedict(self._gen_bytree())
         return self._data
 
     def pettan(self) -> list:
