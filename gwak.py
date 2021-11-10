@@ -2,21 +2,10 @@
 import sys
 import os
 import shutil
-import collections
-import hashlib
 import logging
+import gwak.manifest
 from pathlib import Path
-
-__formats = ['yaml', 'json']
-try:
-    import json
-except ImportError:
-    __formats.remove('json')
-try:
-    import yaml
-    #yaml.add_representer(collections.defaultdict, yaml.representer.Representer.represent_dict)
-except ImportError:
-    __formats.remove('yaml')
+import json
 
 
 __MINSIZE = 256
@@ -42,30 +31,8 @@ def _rmdir(path: Path) -> bool:
         path.rmdir()
     return True
 
-def _walk(path: Path):
-    for item in path.iterdir():
-        if item.name in __params.exclude or not item.match(__params.filter):
-            logging.info(f"excluding path [{item}]")
-            continue
-        if item.is_symlink():
-            logging.info(f"skipping symlink [{item}]")
-            continue
-        if item.is_dir():
-            yield from _walk(item)
-            continue
-        if not item.is_file():
-            logging.info(f"skipping irregular file [{item}]")
-            continue
-        yield item.resolve()
-
 def _is_smol(size: str) -> bool:
     return int(size, 16) < __params.minsize
-
-def __format_size(body: bytes) -> str:
-    return '{:016x}'.format(len(body))
-
-def __format_hash(body: bytes) -> str:
-    return hashlib.sha3_512(body).hexdigest()
 
 def _bury(size: str, hash: str, file: Path) -> dict:
     body_dir = __params.grave / size
@@ -97,46 +64,6 @@ def _exhume(file: Path, links: list) -> bool:
         file.unlink()
     return True
 
-def _write_manifest(data: dict) -> None | bool:
-    logging.info(f"writing manifest [{__params.manifest}]")
-    if __params.dry_run:
-        return True
-    __params.manifest.parent.mkdir(parents = True, exist_ok = True)
-    if __params.manifest.is_file():
-        _backup_manifest()
-    if __params.format not in __formats:
-        raise NotImplementedError(__params.format)
-    with __params.manifest.open(mode = 'w') as f:
-        match __params.format:
-            case 'yaml':
-                return yaml.dump(data, f)
-            case 'json':
-                return json.dump(data, f)
-
-def _read_manifest() -> dict:
-    logging.info(f"reading manifest [{__params.manifest}]")
-    if __params.format not in __formats:
-        raise NotImplementedError(__params.format)
-    with __params.manifest.open(mode = 'r') as f:
-        match __params.format:
-            case 'yaml':
-                return yaml.safe_load(f)
-            case 'json':
-                return json.load(f)
-
-def _backup_manifest() -> None:
-    logging.warning(f"backing up old manifest [{__params.manifest}]")
-    hash = hashlib.sha3_512(__params.manifest.read_bytes()).hexdigest()
-    return __params.manifest.rename(f"{__params.manifest}.{hash}")
-
-def make_manifest(paths: list) -> dict:
-    gwaks = collections.defaultdict(lambda: collections.defaultdict(list))
-    for path in paths:
-        for file in _walk(path):
-            body = file.read_bytes()
-            gwaks[__format_size(body)][__format_hash(body)].append(str(file.resolve()))
-    return {k: dict(v) for k, v in gwaks.items()}
-
 def _dedupe(gwaks: dict):
     for size, gwak in gwaks.items():
         if _is_smol(size) and not __params.force:
@@ -147,7 +74,7 @@ def _dedupe(gwaks: dict):
                 logging.debug(f"skipping unique files [{hash}]")
                 continue
             for file in files:
-                yield _bury(size, hash, Path(file))
+                yield _bury(size, hash, file)
 
 def dedupe(gwaks: dict) -> list:
     return list(_dedupe(gwaks))
@@ -161,7 +88,7 @@ def _redupe(gwaks: dict, grave: Path):
             if not file.is_file():
                 logging.debug(f"skipping missing file [{file}]")
                 continue
-            yield _exhume(file, (Path(link) for link in links))
+            yield _exhume(file, links)
             if __params.force:
                 _rmdir(hashdir)
         if __params.force:
@@ -172,10 +99,10 @@ def redupe(gwaks: dict, grave: str) -> bool:
 
 def _validate_body(file: Path, size: str, hash: str) -> bool:
     body = file.read_bytes()
-    if size != __format_size(body):
+    if size != gwak.manifest.gwak_size(body):
         logging.warning(f"size mismatch [{file}]")
         return False
-    if hash != __format_hash(body):
+    if hash != gwak.manifest.gwak_hash(body):
         logging.warning(f"hash mismatch [{file}]")
         return False
     return True
@@ -184,7 +111,6 @@ def _validate_files(gwaks: dict):
     for size, gwak in gwaks.items():
         for hash, files in gwak.items():
             for file in files:
-                file = Path(file)
                 if not file.is_file():
                     logging.warning("no such file [{file}]")
                     continue
@@ -215,7 +141,7 @@ if __name__ == '__main__':
         parser.add_argument('-v', '--verbose', action = 'count', default = 0, help = "increase verbosity")
         parser.add_argument('-q', '--quiet', action = 'count', default = 0, help = "decrease verbosity")
         parser.add_argument('-m', '--manifest', type = Path, default = __MANIFEST, metavar = 'FILE', help = f"manifest file (default: {__MANIFEST})")
-        parser.add_argument('--format', choices = __formats, default = __formats[0], help = "manifest format")
+        parser.add_argument('--format', choices = gwak.manifest.formats, default = gwak.manifest.formats[0], help = "manifest format")
         parser.add_argument('-g', '--grave', type = Path, default = __GWAK, metavar = 'DIR', help = f"place to bury filebodies (default: {__GWAK} in first target directory)")
         parser.add_argument('-f', '--force', action = 'store_true', help = "gwak rare or small files, and delete filebodies")
         parser.add_argument('-u', '--undo', '--ungwak', action = 'store_true', help = "ungwak by replacing symlinks with regular files")
@@ -238,16 +164,18 @@ if __name__ == '__main__':
         logging.root.setLevel(logging.root.level - __params.verbosity * 10)
 
 
-        if __params.validate:
-            return validate_files(_read_manifest())
-        if __params.check:
-            return validate_grave(_read_manifest(), __params.grave)
-        if __params.undo:
-            return redupe(_read_manifest(), __params.grave)
+        manifest = gwak.manifest.Manifest(__params)
 
-        gwaks = make_manifest(__params.path)
-        _write_manifest(gwaks)
-        return dedupe(gwaks)
+        if __params.validate:
+            return validate_files(manifest.load())
+        if __params.check:
+            return validate_grave(manifest.load(), __params.grave)
+        if __params.undo:
+            return redupe(manifest.load(), __params.grave)
+
+        manifest.make()
+        manifest.write()
+        return dedupe(manifest.get())
 
     result = run_gwak()
     if __params.verbosity >= 0:
