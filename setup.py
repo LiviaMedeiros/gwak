@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name = "gwak",
-    version = "0.3.2",
+    version = "0.3.3",
     author = "LiviaMedeiros",
     author_email = "livia@cirno.name",
     description = "Directory gwaking utility",

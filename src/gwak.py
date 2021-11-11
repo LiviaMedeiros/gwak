@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+
+__version__ = "0.3.3"
 import sys
 import os
 import shutil
@@ -99,10 +101,10 @@ def redupe(gwaks: dict, grave: str) -> bool:
 
 def _validate_body(file: Path, size: str, hash: str) -> bool:
     body = file.read_bytes()
-    if size != gwak.manifest.gwak_size(body):
+    if size != libgwak.manifest.gwak_size(body):
         logging.warning(f"size mismatch [{file}]")
         return False
-    if hash != gwak.manifest.gwak_hash(body):
+    if hash != libgwak.manifest.gwak_hash(body):
         logging.warning(f"hash mismatch [{file}]")
         return False
     return True
@@ -137,6 +139,8 @@ def main():
     def run_gwak():
         global __params
         parser = argparse.ArgumentParser(description = "Gwak a directory by burying filebodies and replacing them with symlinks.")
+        actions = parser.add_mutually_exclusive_group()
+        parser.add_argument('-V', '--version', action = 'version', version = f"%(prog)s {__version__}")
         parser.add_argument('path', type = _filter_dir, nargs = '+', help = "target directory")
         parser.add_argument('-v', '--verbose', action = 'count', default = 0, help = "increase verbosity")
         parser.add_argument('-q', '--quiet', action = 'count', default = 0, help = "decrease verbosity")
@@ -144,14 +148,14 @@ def main():
         parser.add_argument('--format', choices = libgwak.manifest.formats, default = libgwak.manifest.formats[0], help = "manifest format")
         parser.add_argument('-g', '--grave', type = Path, default = __GWAK, metavar = 'DIR', help = f"place to bury filebodies (default: {__GWAK} in first target directory)")
         parser.add_argument('-f', '--force', action = 'store_true', help = "gwak rare or small files, and delete filebodies")
-        parser.add_argument('-u', '--undo', '--ungwak', action = 'store_true', help = "ungwak by replacing symlinks with regular files")
         parser.add_argument('--exclude', type = str, nargs = '*', default = [], metavar = 'DIR', help = "exclude subdirectories by name")
         parser.add_argument('--filter', type = str, default = __FILTERGLOB, metavar = 'PATTERN', help = f"filter files and subdirectories by glob pattern (default: {__FILTERGLOB})")
         parser.add_argument('--minsize', type = int, default = __MINSIZE, metavar = 'N', help = f"minimum file size to be replaced (default: {__MINSIZE})")
         parser.add_argument('--mindupe', type = int, default = __MINDUPE, metavar = 'N', help = f"minimum file appearances to be replaced (default: {__MINDUPE})")
-        parser.add_argument('--validate', action = 'store_true', help = "validate gwaked directory")
-        parser.add_argument('--check', action = 'store_true', help = "integrity check for filebodies")
         parser.add_argument('--dry-run', action = 'store_true', help = "do not write anything")
+        actions.add_argument('-u', '--undo', '--ungwak', action = 'store_true', help = "ungwak by replacing symlinks with regular files")
+        actions.add_argument('--validate', action = 'store_true', help = "validate gwaked directory")
+        actions.add_argument('--check', action = 'store_true', help = "integrity check for filebodies")
 
         __params = parser.parse_args()
         __params.verbosity = __params.verbose - __params.quiet
