@@ -3,9 +3,9 @@ import sys
 import os
 import shutil
 import logging
-import gwak.manifest
 from pathlib import Path
 import json
+import libgwak.manifest
 
 
 __MINSIZE = 256
@@ -132,7 +132,7 @@ def validate_grave(gwaks: dict, grave: Path) -> bool:
     return all(_validate_grave(gwaks, grave))
 
 
-if __name__ == '__main__':
+def main():
     import argparse
     def run_gwak():
         global __params
@@ -141,7 +141,7 @@ if __name__ == '__main__':
         parser.add_argument('-v', '--verbose', action = 'count', default = 0, help = "increase verbosity")
         parser.add_argument('-q', '--quiet', action = 'count', default = 0, help = "decrease verbosity")
         parser.add_argument('-m', '--manifest', type = Path, default = __MANIFEST, metavar = 'FILE', help = f"manifest file (default: {__MANIFEST})")
-        parser.add_argument('--format', choices = gwak.manifest.formats, default = gwak.manifest.formats[0], help = "manifest format")
+        parser.add_argument('--format', choices = libgwak.manifest.formats, default = libgwak.manifest.formats[0], help = "manifest format")
         parser.add_argument('-g', '--grave', type = Path, default = __GWAK, metavar = 'DIR', help = f"place to bury filebodies (default: {__GWAK} in first target directory)")
         parser.add_argument('-f', '--force', action = 'store_true', help = "gwak rare or small files, and delete filebodies")
         parser.add_argument('-u', '--undo', '--ungwak', action = 'store_true', help = "ungwak by replacing symlinks with regular files")
@@ -164,21 +164,24 @@ if __name__ == '__main__':
         logging.root.setLevel(logging.root.level - __params.verbosity * 10)
 
 
-        manifest = gwak.manifest.Manifest(__params)
+        gwaks = libgwak.manifest.Manifest(__params)
 
         if __params.validate:
-            return validate_files(manifest.load())
+            return validate_files(gwaks.load())
         if __params.check:
-            return validate_grave(manifest.load(), __params.grave)
+            return validate_grave(gwaks.load(), __params.grave)
         if __params.undo:
-            return redupe(manifest.load(), __params.grave)
+            return redupe(gwaks.load(), __params.grave)
 
-        manifest.make()
-        manifest.write()
-        return dedupe(manifest.get())
+        gwaks.make()
+        gwaks.write()
+        return dedupe(gwaks.get())
 
     result = run_gwak()
     if __params.verbosity >= 0:
         print(json.dumps(result, indent = 1))
 
     sys.exit(0 if result else 1)
+
+if __name__ == '__main__':
+    main()
