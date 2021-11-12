@@ -22,7 +22,8 @@ setuptools.setup(
     ],
     py_modules = [
         "gwak",
-        "libgwak.manifest"
+        "libgwak.manifest",
+        "libgwak.zy"
     ],
     package_dir = {
         '': 'src'
