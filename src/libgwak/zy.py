@@ -28,7 +28,9 @@ class ZY:
             m *= self.c
         return t
 
-    def encode(self, time: datetime = datetime.datetime.utcnow()) -> str:
+    def encode(self, time: datetime = None) -> str:
+        if time is None:
+            time = datetime.datetime.utcnow()
         return ''.join(map(self._enc,map(int,m.groups())))if(m:=self.r.match(time.strftime('%Y-%m-%d_%H:%M:%S')))else False
 
     def decode(self, zytime: str, oformat: str = '%04d-%02d-%02dT%02d:%02d:%02dZ', iformat: str = '(__)(_)(_)(_)(_)(_)') -> str:
