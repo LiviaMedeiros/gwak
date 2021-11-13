@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 import sys
 import os
 import shutil
@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 import json
 import libgwak.manifest
+import libgwak.zy
 
 
 __MINSIZE = 256
@@ -15,8 +16,14 @@ __MINDUPE = 2
 __MANIFEST = 'gwak'
 __GWAK = '._gwak'
 __FILTERGLOB = '[!.]*'
+__LOGFORMAT = '%(asctime)s %(levelname)-8s | %(message)s'
 
 __params = None
+
+
+class ZYFormatter(logging.Formatter):
+    def formatTime(self, *args, **kwargs) -> str:
+        return libgwak.zy.zy.encode()
 
 
 def _filter_dir(path: str) -> Path:
@@ -28,7 +35,7 @@ def _filter_dir(path: str) -> Path:
 def _rmdir(path: Path) -> bool:
     if not path.is_dir() or any(path.iterdir()):
         return False
-    logging.debug(f"rmdir [{path}]")
+    __params.logger.debug(f"rmdir [{path}]")
     if not __params.dry_run:
         path.rmdir()
     return True
@@ -42,7 +49,7 @@ def _bury(size: str, hash: str, file: Path) -> dict:
         body_dir.mkdir(parents = True, exist_ok = True)
     body = body_dir / hash
     link = body if __params.isabs else os.path.relpath(body, file.parent)
-    logging.debug(f"symlink [{link}]")
+    __params.logger.debug(f"symlink [{link}]")
     if not __params.dry_run:
         if body.is_file():
             file.unlink()
@@ -55,25 +62,25 @@ def _bury(size: str, hash: str, file: Path) -> dict:
     }
 
 def _exhume(file: Path, links: list) -> bool:
-    logging.info(f"exhuming [{file}]")
+    __params.logger.info(f"exhuming [{file}]")
     for link in links:
-        logging.debug(f"copyfile [{link}]")
+        __params.logger.debug(f"copyfile [{link}]")
         if not __params.dry_run:
             link.unlink()
             shutil.copyfile(file, link)
     if __params.force and not __params.dry_run:
-        logging.debug(f"remove [{file}]")
+        __params.logger.debug(f"remove [{file}]")
         file.unlink()
     return True
 
 def _dedupe(gwaks: dict):
     for size, gwak in gwaks.items():
         if _is_smol(size) and not __params.force:
-            logging.debug(f"skipping small files [{size}]")
+            __params.logger.debug(f"skipping small files [{size}]")
             continue
         for hash, files in gwak.items():
             if len(files) < __params.mindupe and not __params.force:
-                logging.debug(f"skipping unique files [{hash}]")
+                __params.logger.debug(f"skipping unique files [{hash}]")
                 continue
             for file in files:
                 yield _bury(size, hash, file)
@@ -88,7 +95,7 @@ def _redupe(gwaks: dict, grave: Path):
             hashdir = sizedir / hash
             file = sizedir / hash
             if not file.is_file():
-                logging.debug(f"skipping missing file [{file}]")
+                __params.logger.debug(f"skipping missing file [{file}]")
                 continue
             yield _exhume(file, links)
             if __params.force:
@@ -102,10 +109,10 @@ def redupe(gwaks: dict, grave: str) -> bool:
 def _validate_body(file: Path, size: str, hash: str) -> bool:
     body = file.read_bytes()
     if size != libgwak.manifest.gwak_size(body):
-        logging.warning(f"size mismatch [{file}]")
+        __params.logger.warning(f"size mismatch [{file}]")
         return False
     if hash != libgwak.manifest.gwak_hash(body):
-        logging.warning(f"hash mismatch [{file}]")
+        __params.logger.warning(f"hash mismatch [{file}]")
         return False
     return True
 
@@ -114,7 +121,7 @@ def _validate_files(gwaks: dict):
         for hash, files in gwak.items():
             for file in files:
                 if not file.is_file():
-                    logging.warning("no such file [{file}]")
+                    __params.logger.warning("no such file [{file}]")
                     continue
                 yield _validate_body(file, size, hash)
 
@@ -126,7 +133,7 @@ def _validate_grave(gwaks: dict, grave: Path):
         for hash in gwak:
             file = grave / size / hash
             if not file.is_file():
-                logging.info(f"no such body [{file}]")
+                __params.logger.info(f"no such body [{file}]")
                 continue
             yield _validate_body(file, size, hash)
 
@@ -152,6 +159,7 @@ def main():
         parser.add_argument('--filter', type = str, default = __FILTERGLOB, metavar = 'PATTERN', help = f"filter files and subdirectories by glob pattern (default: {__FILTERGLOB})")
         parser.add_argument('--minsize', type = int, default = __MINSIZE, metavar = 'N', help = f"minimum file size to be replaced (default: {__MINSIZE})")
         parser.add_argument('--mindupe', type = int, default = __MINDUPE, metavar = 'N', help = f"minimum file appearances to be replaced (default: {__MINDUPE})")
+        parser.add_argument('--log', type = Path, metavar = 'FILE', help = "tee log to file")
         parser.add_argument('--dry-run', action = 'store_true', help = "do not write anything")
         actions.add_argument('-u', '--undo', '--ungwak', action = 'store_true', help = "ungwak by replacing symlinks with regular files")
         actions.add_argument('--validate', action = 'store_true', help = "validate gwaked directory")
@@ -165,7 +173,13 @@ def main():
             __params.grave = __params.path[0] / __params.grave
         __params.manifest = __params.manifest if __params.manifest.is_absolute() else __params.grave / __params.manifest
 
-        logging.root.setLevel(logging.root.level - __params.verbosity * 10)
+        __params.logger = logging.getLogger('gwak')
+        __params.logger.setLevel(logging.root.level - __params.verbosity * 10 - 1)
+        if __params.log:
+            __params.logger.addHandler(logf := logging.FileHandler(__params.log.resolve()))
+            logf.setFormatter(ZYFormatter(__LOGFORMAT))
+        __params.logger.addHandler(logh := logging.StreamHandler())
+        logh.setFormatter(ZYFormatter(__LOGFORMAT))
 
 
         gwaks = libgwak.manifest.Manifest(__params)

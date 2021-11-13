@@ -1,4 +1,3 @@
-import logging
 import collections
 import hashlib
 from pathlib import Path
@@ -27,8 +26,14 @@ def gwak_hash(body: bytes) -> str:
 class Manifest():
     _data: dict = {}
     _file: Path = None
+    _logger = None
     _params: dict = {}
 
+
+    def __init__(self, params: dict):
+        self._params = params
+        self._logger = params.logger
+        self._file = params.manifest
 
     def _normalize(self, data: dict) -> dict:
         return {k: dict(v) for k, v in data.items()}
@@ -36,16 +41,16 @@ class Manifest():
     def _walk(self, path: Path):
         for item in path.iterdir():
             if item.name in self._params.exclude or not item.match(self._params.filter):
-                logging.info(f"excluding path [{item}]")
+                self._logger.info(f"excluding path [{item}]")
                 continue
             if item.is_symlink():
-                logging.debug(f"skipping symlink [{item}]")
+                self._logger.debug(f"skipping symlink [{item}]")
                 continue
             if item.is_dir():
                 yield from self._walk(item)
                 continue
             if not item.is_file():
-                logging.debug(f"skipping irregular file [{item}]")
+                self._logger.debug(f"skipping irregular file [{item}]")
                 continue
             yield item.resolve()
 
@@ -69,7 +74,7 @@ class Manifest():
         return self._normalize(gwaks)
 
     def _backup(self) -> None:
-        logging.warning(f"backing up old manifest [{self._file}]")
+        self._logger.warning(f"backing up old manifest [{self._file}]")
         hash = hashlib.sha3_512(self._file.read_bytes()).hexdigest()
         return self._file.rename(f"{self._file}.{hash}")
 
@@ -98,7 +103,7 @@ class Manifest():
         return self._data
 
     def read(self) -> dict:
-        logging.info(f"reading manifest [{self._file}]")
+        self._logger.info(f"reading manifest [{self._file}]")
         if self._params.format not in formats:
             raise NotImplementedError(self._params.format)
         return self._read()
@@ -112,7 +117,7 @@ class Manifest():
         return self._data
 
     def write(self) -> None | bool:
-        logging.info(f"writing manifest [{self._file}]")
+        self._logger.info(f"writing manifest [{self._file}]")
         if self._params.dry_run:
             return True
         self._file.parent.mkdir(parents = True, exist_ok = True)
@@ -131,7 +136,3 @@ class Manifest():
 
     def serialize(self) -> dict:
         return {s:{h:[str(p)for p in f]for h,f in g.items()}for s,g in self._data.items()}
-
-    def __init__(self, params: dict):
-        self._params = params
-        self._file = params.manifest
