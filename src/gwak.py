@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 
-__version__ = "0.5.0"
-import sys
+__version__ = "0.5.1"
 import os
 import shutil
 import logging
 from pathlib import Path
-import json
 import libgwak.manifest
 import libgwak.zy
 
@@ -150,7 +148,9 @@ class Gwak:
 
 
 def main():
+    import sys
     import argparse
+    import json
     __LOGFORMAT = '%(asctime)s %(levelname)-8s | %(message)s'
     def run_gwak():
         global __params
