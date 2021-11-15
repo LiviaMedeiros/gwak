@@ -4,7 +4,7 @@ import datetime
 import re
 
 class ZY:
-    r: re = re.compile(r"^([\d]+)-([\d]+)-([\d]+)_([\d]+):([\d]+):([\d]+)$")
+    r: re = re.compile(r"([\d]+)-([\d]+)-([\d]+)_([\d]+):([\d]+):([\d]+)")
 
     def __init__(self, base: str = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx', rx: str = '[0-9A-Za-x]'):
         self.z = tuple(base)
@@ -31,10 +31,10 @@ class ZY:
     def encode(self, time: datetime = None) -> str:
         if time is None:
             time = datetime.datetime.utcnow()
-        return ''.join(map(self._enc,map(int,m.groups())))if(m:=self.r.match(time.strftime('%Y-%m-%d_%H:%M:%S')))else False
+        return ''.join(map(self._enc,map(int,m.groups())))if(m:=self.r.fullmatch(time.strftime('%Y-%m-%d_%H:%M:%S')))else False
 
     def decode(self, zytime: str, oformat: str = '%04d-%02d-%02dT%02d:%02d:%02dZ', iformat: str = '(__)(_)(_)(_)(_)(_)') -> str:
-        return oformat%tuple(map(self._dec,m.groups()))if(m:=re.match(fr"^z*{iformat}y*$".replace('_',self.rx),zytime))else False
+        return oformat%tuple(map(self._dec,m.groups()))if(m:=re.fullmatch(fr"z*{iformat}y*".replace('_',self.rx),zytime))else False
 
 zy = ZY()
 
