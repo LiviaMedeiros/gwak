@@ -98,14 +98,11 @@ class Gwak:
         for size, gwak in gwaks.items():
             sizedir = self._params.grave / size
             for hash, links in gwak.items():
-                hashdir = sizedir / hash
                 file = sizedir / hash
                 if not file.is_file():
                     self._logger.debug(f"skipping missing file [{file}]")
                     continue
                 yield self._exhume(file, links)
-                if self._params.force:
-                    self._rmdir(hashdir)
             if self._params.force:
                 self._rmdir(sizedir)
 
@@ -194,17 +191,17 @@ def main():
         manifest = libgwak.manifest.Manifest(__params)
         gwak = Gwak(__params, gwakdata = manifest)
 
-
-        if __params.validate:
-            return gwak.validate_files(manifest.load())
-        if __params.check:
-            return gwak.validate_grave(manifest.load())
-        if __params.undo:
-            return gwak.redupe(manifest.load())
-
-        manifest.make()
-        manifest.write()
-        return gwak.dedupe(manifest.get())
+        match True:
+            case __params.validate:
+                return gwak.validate_files(manifest.load())
+            case __params.check:
+                return gwak.validate_grave(manifest.load())
+            case __params.undo:
+                return gwak.redupe(manifest.load())
+            case _:
+                manifest.make()
+                manifest.write()
+                return gwak.dedupe(manifest.get())
 
     result = run_gwak()
     if __params.verbosity >= 0:
