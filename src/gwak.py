@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 import os
 import shutil
 import logging
@@ -127,7 +127,7 @@ class Gwak:
             for hash, files in gwak.items():
                 for file in files:
                     if not file.is_file():
-                        self._logger.warning("no such file [{file}]")
+                        self._logger.warning(f"no such file [{file}]")
                         continue
                     yield self._validate_body(file, size, hash)
 

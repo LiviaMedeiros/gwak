@@ -38,6 +38,12 @@ class Manifest():
     def _normalize(self, data: dict) -> dict:
         return {k: dict(v) for k, v in data.items()}
 
+    def _transform(self, data: dict, mutator: callable = str) -> dict:
+        return {size: {hash: [mutator(file)
+            for file in files]
+            for hash, files in gwak.items()}
+            for size, gwak in data.items()}
+
     def _walk(self, path: Path):
         for item in path.iterdir():
             if item.name in self._params.exclude or not item.match(self._params.filter):
@@ -108,12 +114,8 @@ class Manifest():
             raise NotImplementedError(self._params.format)
         return self._read()
 
-    def load(self) -> dict:
-        gwaks = self.read()
-        for size, gwak in gwaks.items():
-            for hash, files in gwak.items():
-                files[:] = (Path(file) for file in files)
-        self._data = gwaks
+    def load(self, mutator: callable = Path) -> dict:
+        self._data = self._transform(self.read(), mutator)
         return self._data
 
     def write(self) -> None | bool:
@@ -131,8 +133,8 @@ class Manifest():
         self._data = self._makedict(self._gen_bytree())
         return self._data
 
-    def pettan(self) -> list:
-        return [(s,h,str(p))for s,g in self._data.items()for h,f in g.items()for p in f]
+    def pettan(self, m: callable = str):
+        return ((s,h,m(p))for s,g in self._data.items()for h,f in g.items()for p in f)
 
-    def serialize(self) -> dict:
-        return {s:{h:[str(p)for p in f]for h,f in g.items()}for s,g in self._data.items()}
+    def serialize(self, m: callable = str) -> dict:
+        return self._transform(self._data, m)
