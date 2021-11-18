@@ -46,8 +46,11 @@ class Manifest():
 
     def _walk(self, path: Path):
         for item in path.iterdir():
-            if item.name in self._params.exclude or not item.match(self._params.filter):
+            if item.name in self._params.exclude:
                 self._logger.info(f"excluding path [{item}]")
+                continue
+            if not item.match(self._params.filter):
+                self._logger.info(f"filtering out path [{item}]")
                 continue
             if item.is_symlink():
                 self._logger.debug(f"skipping symlink [{item}]")
@@ -71,7 +74,7 @@ class Manifest():
             yield size, hash, Path(file)
 
     def _csvload(self, f) -> dict:
-        return self._makedict(self._gen_bytable(csv.reader(f)))
+        return self._makedict(csv.reader(f))
 
     def _makedict(self, gen) -> dict:
         gwaks = collections.defaultdict(lambda: collections.defaultdict(list))
