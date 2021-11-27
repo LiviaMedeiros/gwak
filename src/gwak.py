@@ -110,11 +110,10 @@ class Gwak:
         return all(self._redupe(gwaks))
 
     def _validate_body(self, file: Path, size: str, hash: str) -> bool:
-        body = file.read_bytes()
-        if size != libgwak.manifest.gwak_size(body):
+        if size != libgwak.manifest.gwak_size(file):
             self._logger.warning(f"size mismatch [{file}]")
             return False
-        if hash != libgwak.manifest.gwak_hash(body):
+        if hash != libgwak.manifest.gwak_hash(file):
             self._logger.warning(f"hash mismatch [{file}]")
             return False
         return True

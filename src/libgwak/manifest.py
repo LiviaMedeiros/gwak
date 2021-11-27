@@ -17,11 +17,11 @@ try:
 except ImportError:
     formats.remove('yaml')
 
-def gwak_size(body: bytes) -> str:
-    return '{:016x}'.format(len(body))
+def gwak_size(file: Path) -> str:
+    return '{:016x}'.format(file.stat().st_size)
 
-def gwak_hash(body: bytes) -> str:
-    return hashlib.sha3_512(body).hexdigest()
+def gwak_hash(file: Path) -> str:
+    return hashlib.sha3_512(file.read_bytes()).hexdigest()
 
 class Manifest():
     _data: dict = {}
@@ -66,8 +66,7 @@ class Manifest():
     def _gen_bytree(self):
         for path in self._params.path:
             for file in self._walk(path):
-                body = file.read_bytes()
-                yield gwak_size(body), gwak_hash(body), file.resolve()
+                yield gwak_size(file), gwak_hash(file), file.resolve()
 
     def _gen_bytable(self, files):
         for size, hash, file in files:
