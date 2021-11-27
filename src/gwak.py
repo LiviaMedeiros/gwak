@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "0.5.3"
+__version__ = "0.6.0"
 import os
 import shutil
 import logging
@@ -25,6 +25,7 @@ class Gwak:
     MANIFEST: str = 'gwak'
     GWAK: str = '._gwak'
     FILTERGLOB: str = '[!.]*'
+    HASHALGO: str = 'sha3_512'
 
     minsize: int = 256
     mindupe: int = 2
@@ -113,7 +114,7 @@ class Gwak:
         if size != libgwak.manifest.gwak_size(file):
             self._logger.warning(f"size mismatch [{file}]")
             return False
-        if hash != libgwak.manifest.gwak_hash(file):
+        if hash != libgwak.manifest.gwak_hash(file, algo = self._params.hash):
             self._logger.warning(f"hash mismatch [{file}]")
             return False
         return True
@@ -147,6 +148,7 @@ def main():
     import sys
     import argparse
     import json
+    import hashlib
     __LOGFORMAT = '%(asctime)s %(levelname)-8s | %(message)s'
     def run_gwak():
         global __params
@@ -158,6 +160,7 @@ def main():
         parser.add_argument('-q', '--quiet', action = 'count', default = 0, help = "decrease verbosity")
         parser.add_argument('-m', '--manifest', type = Path, default = Gwak.MANIFEST, metavar = 'FILE', help = f"manifest file (default: {Gwak.MANIFEST})")
         parser.add_argument('--format', choices = libgwak.manifest.formats, default = libgwak.manifest.formats[0], help = "manifest format")
+        parser.add_argument('--hash', choices = hashlib.algorithms_available, default = Gwak.HASHALGO, help = f"hash algo (default: {Gwak.HASHALGO})")
         parser.add_argument('-g', '--grave', type = Path, default = Gwak.GWAK, metavar = 'DIR', help = f"place to bury filebodies (default: {Gwak.GWAK} in first target directory)")
         parser.add_argument('-f', '--force', action = 'store_true', help = "gwak rare or small files, and delete filebodies")
         parser.add_argument('--exclude', type = str, nargs = '*', default = [], metavar = 'DIR', help = "exclude subdirectories by name")

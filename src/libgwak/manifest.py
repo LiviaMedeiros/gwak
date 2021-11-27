@@ -22,7 +22,7 @@ def gwak_size(file: Path) -> str:
     return '{:016x}'.format(file.stat().st_size)
 
 def gwak_hash(file: Path, algo: str = 'sha3_512', blocksize: int = 0x100000) -> str:
-    hash = hashlib.sha3_512()
+    hash = hashlib.new(algo)
     with file.open(mode = 'rb') as f:
         while chunk := f.read(blocksize):
             hash.update(chunk)
@@ -72,7 +72,7 @@ class Manifest():
     def _gen_bytree(self):
         for path in self._params.path:
             for file in self._walk(path):
-                yield gwak_size(file), gwak_hash(file), file.resolve()
+                yield gwak_size(file), gwak_hash(file, self._params.hash), file
 
     def _gen_bytable(self, files):
         for size, hash, file in files:
