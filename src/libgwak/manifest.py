@@ -17,11 +17,17 @@ try:
 except ImportError:
     formats.remove('yaml')
 
+
 def gwak_size(file: Path) -> str:
     return '{:016x}'.format(file.stat().st_size)
 
-def gwak_hash(file: Path) -> str:
-    return hashlib.sha3_512(file.read_bytes()).hexdigest()
+def gwak_hash(file: Path, algo: str = 'sha3_512', blocksize: int = 0x100000) -> str:
+    hash = hashlib.sha3_512()
+    with file.open(mode = 'rb') as f:
+        while chunk := f.read(blocksize):
+            hash.update(chunk)
+    return hash.hexdigest()
+
 
 class Manifest():
     _data: dict = {}
