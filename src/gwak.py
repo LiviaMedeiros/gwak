@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 import os
 import shutil
 import logging
@@ -37,7 +37,7 @@ class Gwak:
         if hasattr(self._params, 'minsize'):
             self.minsize = self._params.minsize
         if hasattr(self._params, 'mindupe'):
-            self.minsize = self._params.mindupe
+            self.mindupe = self._params.mindupe
 
     def _rmdir(self, path: Path) -> bool:
         if not path.is_dir() or any(path.iterdir()):

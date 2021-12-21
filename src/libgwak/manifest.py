@@ -19,7 +19,7 @@ except ImportError:
 
 
 def gwak_size(file: Path) -> str:
-    return '{:016x}'.format(file.stat().st_size)
+    return f"{file.stat().st_size:016x}"
 
 def gwak_hash(file: Path, algo: str = 'sha3_512', blocksize: int = 0x100000) -> str:
     hash = hashlib.new(algo)
